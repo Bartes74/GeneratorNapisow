@@ -1,12 +1,61 @@
-# React + Vite
+# Subtitle Generator Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React frontend for the subtitle generator application.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Video upload interface
+- Subtitle editing
+- Real-time preview
+- Customizable subtitle styling
+- Video rendering with embedded subtitles
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Node.js 18+
+- Docker (for containerized deployment)
+
+## Dependencies
+
+All dependencies are listed in [package.json](package.json).
+
+Key dependencies include:
+- React - UI library
+- Vite - Build tool
+- TailwindCSS - Styling framework
+- Axios - HTTP client
+- Video.js - Video player
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+The built files will be in the `dist` directory.
+
+## Production Deployment
+
+Use the provided Dockerfile for containerized deployment:
+
+```bash
+docker build -t subtitle-generator-frontend .
+docker run -p 80:80 subtitle-generator-frontend
+```
+
+## Nginx Configuration
+
+The application uses Nginx for serving static files and proxying API requests to the backend. The configuration is in [nginx.conf](nginx.conf).
+
+Key features of the Nginx configuration:
+- Static file serving
+- API proxy to backend
+- Client-side routing support
+- Gzip compression

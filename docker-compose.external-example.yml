@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/temp:/app/temp
+      - ./backend/output:/app/output
+    environment:
+      - PYTHONPATH=/app
+      - TRANSCRIPTION_API_URL=https://api.openai.com/v1
+      - TRANSCRIPTION_API_KEY=your-openai-api-key-here
+      - TRANSCRIPTION_MODEL=whisper-1
+      # Optional: Set frontend origins for CORS
+      - FRONTEND_ORIGINS=http://localhost,http://localhost:5173
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

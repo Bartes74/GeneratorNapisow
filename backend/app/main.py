@@ -18,10 +18,11 @@ from app.transcription import transcribe_audio, extract_audio, generate_srt, det
 # Inicjalizacja FastAPI
 app = FastAPI(title="Subtitle Generator API")
 
-# CORS dla frontendu
+# CORS dla frontendu - updated for production
+frontend_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://localhost").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,7 +71,7 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "api": "running",
-            "whisper": "ready",
+            "whisper": "not used - external service only",
             "ffmpeg": "ready"
         }
     }

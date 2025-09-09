@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+
+# Python
+backend/venv/
+__pycache__/
+*.py[cod]
+*.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# App data
+backend/uploads/
+backend/temp/
+backend/output/
+
+# Env and secrets
+.env
+.env.*
+
+# Docker artifacts
+*.tar
+
+# Logs
+*.log
