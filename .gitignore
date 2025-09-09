@@ -17,6 +17,8 @@ backend/temp/
 backend/output/
 
 # Env and secrets
+run/
+logs/
 .env
 .env.*
 
