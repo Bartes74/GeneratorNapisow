@@ -7,6 +7,13 @@
     <title>Vite + React</title>
   </head>
   <body>
+    <script>
+      // Runtime-configurable API endpoint
+      window.__APP_CONFIG__ = {
+        API_BASE: (window.ENV_API_BASE || '').replace(/\/$/, '')
+      };
+    </script>
+    <script src="/config.js"></script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

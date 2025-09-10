@@ -58,6 +58,10 @@ COPY backend/ .
 # Copy built frontend files to nginx directory
 COPY --from=frontend-build /app/dist /var/www/html
 
+# Copy runtime entrypoint that generates /var/www/html/config.js from env
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Copy nginx configuration
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
@@ -67,5 +71,5 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Expose both ports
 EXPOSE 80 8000
 
-# Start both nginx and the backend application using supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Start via entrypoint to materialize runtime config for frontend
+ENTRYPOINT ["/docker-entrypoint.sh"]

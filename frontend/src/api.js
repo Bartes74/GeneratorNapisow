@@ -5,7 +5,8 @@ const inferredDevBase = (typeof window !== 'undefined' && window.location.port =
   ? 'http://localhost:8000'
   : ''
 
-const rawBase = (import.meta.env && import.meta.env.VITE_API_URL) || inferredDevBase || ''
+const runtimeBase = (typeof window !== 'undefined' && window.__APP_CONFIG__ && window.__APP_CONFIG__.API_BASE) || ''
+const rawBase = runtimeBase || (import.meta.env && import.meta.env.VITE_API_URL) || inferredDevBase || ''
 
 export const API_BASE = rawBase.replace(/\/$/, '')
 
