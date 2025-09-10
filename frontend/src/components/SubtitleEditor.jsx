@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete }) {
     const [fontFamily, setFontFamily] = useState(subtitleStyles?.fontFamily || 'Arial')
@@ -24,7 +23,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
         const formData = new FormData()
         formData.append('file', file)
         try {
-            await axios.post(`${API_URL}/api/upload-srt/${videoId}`, formData)
+            await axios.post(apiPath(`/api/upload-srt/${videoId}`), formData)
             alert('Plik SRT został zaktualizowany!')
         } catch (err) {
             console.error('Błąd wgrywania SRT:', err)
@@ -46,7 +45,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
             console.log('Wysyłanie stylów próbki:', stylesData)
             
             const response = await axios.post(
-                `${API_URL}/api/render-preview/${videoId}`,
+                apiPath(`/api/render-preview/${videoId}`),
                 { 
                     subtitle_styles: stylesData
                 },
@@ -165,7 +164,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
             
             // Czekaj chwilę i otwórz link do pobrania
             setTimeout(() => {
-                window.open(`${API_URL}/api/download/video/${videoId}`, '_blank')
+                window.open(apiPath(`/api/download/video/${videoId}`), '_blank')
             }, 1000)
             
             alert('Film został wygenerowany pomyślnie! Pobieranie rozpocznie się za chwilę.')

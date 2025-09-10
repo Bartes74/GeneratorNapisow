@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight } from 'lucide-react'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function VideoPreview({ videoData, transcriptionData, subtitleStyles, onNext, onBack }) {
   const videoRef = useRef(null)
@@ -36,7 +35,7 @@ function VideoPreview({ videoData, transcriptionData, subtitleStyles, onNext, on
       // Dodaj ścieżkę napisów
       player.addRemoteTextTrack({
         kind: 'subtitles',
-        src: `${API_URL}/api/download/srt/${videoData.video_id}`,
+        src: apiPath(`/api/download/srt/${videoData.video_id}`),
         srclang: transcriptionData.language || 'pl',
         label: 'Polski',
         default: true
@@ -44,7 +43,7 @@ function VideoPreview({ videoData, transcriptionData, subtitleStyles, onNext, on
 
       // Ustaw źródło wideo
       player.src({
-        src: `${API_URL}/uploads/${videoData.video_id}${videoData.format}`,
+        src: apiPath(`/uploads/${videoData.video_id}${videoData.format}`),
         type: `video/${videoData.format.substring(1)}`
       })
 

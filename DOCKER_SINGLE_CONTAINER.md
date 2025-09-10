@@ -18,6 +18,9 @@ The single-container approach combines both the frontend and backend services in
 
 ```bash
 docker build -t subtitle-generator .
+
+# Build with custom API URL for frontend (if backend is on different host)
+docker build --build-arg VITE_API_URL=https://twoja-domena.pl -t subtitle-generator .
 ```
 
 ## Running the Container

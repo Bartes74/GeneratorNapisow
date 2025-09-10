@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react'
 import { Upload, Download, FileText, Film, Loader, X, AlertCircle } from 'lucide-react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function SimpleApp() {
   const [file, setFile] = useState(null)
@@ -60,7 +59,7 @@ function SimpleApp() {
 
     try {
       // Upload with timeout
-      const uploadResponse = await axios.post(`${API_URL}/api/upload`, formData, {
+      const uploadResponse = await axios.post(apiPath('/api/upload'), formData, {
         timeout: 30000 // 30 seconds
       })
       setVideoData(uploadResponse.data)
@@ -70,7 +69,7 @@ function SimpleApp() {
       setLoadingMessage('Generowanie transkrypcji... (to może potrwać kilka minut)')
       
       const transcribeResponse = await axios.post(
-        `${API_URL}/api/transcribe/${uploadResponse.data.video_id}?language=${selectedLanguage === 'auto' ? '' : selectedLanguage}`,
+        apiPath(`/api/transcribe/${uploadResponse.data.video_id}?language=${selectedLanguage === 'auto' ? '' : selectedLanguage}`),
         null,
         {
           timeout: 300000 // 5 minutes
@@ -93,7 +92,7 @@ function SimpleApp() {
   const downloadSRT = async () => {
     if (!videoData) return
     
-    window.open(`${API_URL}/api/download/srt/${videoData.video_id}`, '_blank')
+    window.open(apiPath(`/api/download/srt/${videoData.video_id}`), '_blank')
   }
 
   const handleSRTUpload = async (e) => {
@@ -104,7 +103,7 @@ function SimpleApp() {
     formData.append('file', file)
 
     try {
-      await axios.post(`${API_URL}/api/upload-srt/${videoData.video_id}`, formData)
+      await axios.post(apiPath(`/api/upload-srt/${videoData.video_id}`), formData)
       setError('')
       alert('Plik SRT został zaktualizowany!')
     } catch (err) {
@@ -120,7 +119,7 @@ function SimpleApp() {
 
     try {
       const response = await axios.post(
-        `${API_URL}/api/render-preview/${videoData.video_id}`,
+        apiPath(`/api/render-preview/${videoData.video_id}`),
         { subtitle_styles: subtitleStyles },
         { responseType: 'blob' }
       )
@@ -142,12 +141,12 @@ function SimpleApp() {
 
     try {
       await axios.post(
-        `${API_URL}/api/render-final/${videoData.video_id}`,
+        apiPath(`/api/render-final/${videoData.video_id}`),
         { subtitle_styles: subtitleStyles }
       )
       
       setLoading(false)
-      window.open(`${API_URL}/api/download/video/${videoData.video_id}`, '_blank')
+      window.open(apiPath(`/api/download/video/${videoData.video_id}`), '_blank')
     } catch (err) {
       setError('Błąd renderowania filmu')
       setLoading(false)

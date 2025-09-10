@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Download, Loader, Film, FileText, AlertCircle, CheckCircle } from 'lucide-react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function FinalRender({ videoData, subtitleStyles, onComplete }) {
   const [rendering, setRendering] = useState(false)
@@ -58,7 +57,7 @@ function FinalRender({ videoData, subtitleStyles, onComplete }) {
   const downloadSRT = async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/api/download/srt/${videoData.video_id}`,
+        apiPath(`/api/download/srt/${videoData.video_id}`),
         { responseType: 'blob' }
       )
       

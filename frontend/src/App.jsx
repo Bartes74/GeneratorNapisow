@@ -41,13 +41,16 @@ function App() {
 
     const handleSubtitleComplete = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/api/render-final/${videoData.video_id}`, {
+            const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '')
+            const url = `${base || ''}/api/render-final/${videoData.video_id}`
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ subtitle_styles: subtitleStyles })
             })
             if (response.ok) {
-                window.open(`http://localhost:8000/api/download/video/${videoData.video_id}`, '_blank')
+                const dl = `${base || ''}/api/download/video/${videoData.video_id}`
+                window.open(dl, '_blank')
             }
         } catch (err) {
             alert('Błąd podczas renderowania filmu')
@@ -92,7 +95,11 @@ function App() {
                             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
                                 <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Transkrypcja ukończona</h3>
                                 <button
-                                    onClick={() => window.open(`http://localhost:8000/api/download/srt/${videoData.video_id}`, '_blank')}
+                                    onClick={() => {
+                                        const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '')
+                                        const link = `${base || ''}/api/download/srt/${videoData.video_id}`
+                                        window.open(link, '_blank')
+                                    }}
                                     className="w-full py-3 bg-[#006575] text-white rounded-lg hover:bg-[#004A55] transition-all duration-200 font-medium"
                                 >
                                     Pobierz plik napisów

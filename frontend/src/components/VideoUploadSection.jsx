@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function VideoUploadSection({ onVideoUpload, onTranscriptionComplete }) {
   const [videoFile, setVideoFile] = useState(null)
@@ -55,7 +54,7 @@ function VideoUploadSection({ onVideoUpload, onTranscriptionComplete }) {
     formData.append('file', videoFile)
 
     try {
-      const uploadResponse = await axios.post(`${API_URL}/api/upload`, formData, {
+      const uploadResponse = await axios.post(apiPath('/api/upload'), formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -68,7 +67,7 @@ function VideoUploadSection({ onVideoUpload, onTranscriptionComplete }) {
       setTranscribing(true)
 
       const transcribeResponse = await axios.post(
-        `${API_URL}/api/transcribe/${uploadResponse.data.video_id}?language=${selectedLanguage === 'auto' ? '' : selectedLanguage}`,
+        apiPath(`/api/transcribe/${uploadResponse.data.video_id}?language=${selectedLanguage === 'auto' ? '' : selectedLanguage}`),
         null,
         { timeout: 300000 }
       )

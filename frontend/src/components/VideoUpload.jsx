@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react'
 import { Upload, X, AlertCircle, CheckCircle } from 'lucide-react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function VideoUpload({ onUploadComplete }) {
   const [file, setFile] = useState(null)
@@ -47,7 +46,7 @@ function VideoUpload({ onUploadComplete }) {
     formData.append('file', file)
 
     try {
-      const response = await axios.post(`${API_URL}/api/upload`, formData, {
+      const response = await axios.post(apiPath('/api/upload'), formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         },

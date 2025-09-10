@@ -2,6 +2,10 @@
 # Stage 1: Build the React frontend
 FROM node:18-alpine AS frontend-build
 
+# Optional API base URL for frontend build (Vite picks up VITE_* env vars at build time)
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Set working directory
 WORKDIR /app
 
@@ -14,7 +18,7 @@ RUN npm ci
 # Copy frontend source code
 COPY frontend/ .
 
-# Build the frontend application
+# Build the frontend application (ENV VITE_API_URL is available to Vite)
 RUN npm run build
 
 # Stage 2: Set up the backend with Python and frontend files

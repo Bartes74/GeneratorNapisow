@@ -32,7 +32,11 @@ For simpler deployments, you can use a single container that includes both the f
 
 1. Build the single container:
    ```bash
+   # default build (frontend will use relative /api in production)
    docker build -t subtitle-generator .
+
+   # build with explicit API URL for frontend (if backend under different domain)
+   docker build --build-arg VITE_API_URL=https://twoja-domena.pl -t subtitle-generator .
    ```
 
 2. Run the container (basic):

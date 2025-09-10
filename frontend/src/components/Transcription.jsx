@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Loader, Download, AlertCircle } from 'lucide-react'
 import axios from 'axios'
-
-const API_URL = 'http://localhost:8000'
+import { apiPath } from '../api'
 
 function Transcription({ videoData, onTranscriptionComplete }) {
   const [transcribing, setTranscribing] = useState(false)
@@ -33,7 +32,7 @@ function Transcription({ videoData, onTranscriptionComplete }) {
     try {
       const language = selectedLanguage === 'auto' ? null : selectedLanguage
       const response = await axios.post(
-        `${API_URL}/api/transcribe/${videoData.video_id}`,
+        apiPath(`/api/transcribe/${videoData.video_id}`),
         null,
         {
           params: { language },
@@ -59,7 +58,7 @@ function Transcription({ videoData, onTranscriptionComplete }) {
   const downloadSRT = async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/api/download/srt/${videoData.video_id}`,
+        apiPath(`/api/download/srt/${videoData.video_id}`),
         { responseType: 'blob' }
       )
 
