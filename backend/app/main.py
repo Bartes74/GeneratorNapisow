@@ -137,8 +137,10 @@ async def transcribe_video(
             executor, transcribe_audio, audio_path, language
         )
 
-        # Generuj SRT
-        srt_content = generate_srt(result['segments'])
+        # Generuj SRT (obsługa zarówno verbose_json -> segments, jak i trybu SRT)
+        srt_content = result.get('srt') if isinstance(result, dict) else None
+        if not srt_content:
+            srt_content = generate_srt(result['segments'])
 
         # Zapisz SRT
         with open(srt_path, 'w', encoding='utf-8') as f:

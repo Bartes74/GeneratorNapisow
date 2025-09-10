@@ -1,15 +1,15 @@
 import os
-import requests
 import json
 from pathlib import Path
 import subprocess
 from typing import List, Dict, Optional
 from functools import lru_cache
+from openai import OpenAI
 
 # Environment variables for external transcription service
 EXTERNAL_TRANSCRIPTION_URL = os.getenv("TRANSCRIPTION_API_URL")
 EXTERNAL_TRANSCRIPTION_KEY = os.getenv("TRANSCRIPTION_API_KEY")
-EXTERNAL_TRANSCRIPTION_MODEL = os.getenv("TRANSCRIPTION_MODEL", "whisper-large-v3")
+EXTERNAL_TRANSCRIPTION_MODEL = os.getenv("TRANSCRIPTION_MODEL", "whisper-1")
 
 # Flag to determine which transcription method to use
 USE_EXTERNAL_TRANSCRIPTION = bool(EXTERNAL_TRANSCRIPTION_URL and EXTERNAL_TRANSCRIPTION_KEY)
@@ -63,75 +63,43 @@ def extract_audio(video_path: Path, audio_path: Path) -> bool:
         return False
 
 def transcribe_audio_with_external_service(audio_path: Path, language: Optional[str] = None) -> Dict:
-    """Transcribe audio using external OpenAI-compatible API service"""
+    """Transcribe audio using OpenAI Python SDK client.
+
+    Uses client.audio.transcriptions.create with response_format='srt' as requested.
+    Returns a dict with 'text' and 'srt' fields (segments not provided in SRT mode).
+    """
     try:
-        print(f"Rozpoczynam transkrypcję zewnętrznym serwisem: {audio_path}")
+        print(f"Rozpoczynam transkrypcję (OpenAI SDK): {audio_path}")
         print(f"Język: {language or 'auto-detect'}")
         print(f"Serwis: {EXTERNAL_TRANSCRIPTION_URL}")
         print(f"Model: {EXTERNAL_TRANSCRIPTION_MODEL}")
-        
-        # Prepare headers
-        headers = {
-            "Authorization": f"Bearer {EXTERNAL_TRANSCRIPTION_KEY}",
-            "Content-Type": "multipart/form-data"
-        }
-        
-        # Prepare files and data
-        with open(audio_path, 'rb') as audio_file:
-            files = {
-                'file': (audio_path.name, audio_file, 'audio/wav')
-            }
-            
-            data = {
-                'model': EXTERNAL_TRANSCRIPTION_MODEL
-            }
-            
-            if language:
-                data['language'] = language
-                
-            # Make request to external service
-            response = requests.post(
-                f"{EXTERNAL_TRANSCRIPTION_URL}/audio/transcriptions",
-                headers=headers,
-                files=files,
-                data=data
+
+        client = OpenAI(api_key=EXTERNAL_TRANSCRIPTION_KEY, base_url=EXTERNAL_TRANSCRIPTION_URL)
+
+        with open(audio_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model=EXTERNAL_TRANSCRIPTION_MODEL,
+                file=audio_file,
+                response_format="srt",
+                language=language or "pl",
+                temperature=0.7,
             )
-            
-            if response.status_code != 200:
-                raise Exception(f"Błąd transkrypcji zewnętrznego serwisu: {response.status_code} - {response.text}")
-            
-            result = response.json()
-            
-            # Convert to our expected format
-            segments_list = []
-            full_text = result.get('text', '')
-            
-            # Handle segments if provided
-            if 'segments' in result:
-                for segment in result['segments']:
-                    segments_list.append({
-                        'text': segment['text'],
-                        'start': segment['start'],
-                        'end': segment['end'],
-                        'timestamp': [segment['start'], segment['end']]
-                    })
-            else:
-                # If no segments, create a single segment
-                segments_list.append({
-                    'text': full_text,
-                    'start': 0.0,
-                    'end': 0.0,
-                    'timestamp': [0.0, 0.0]
-                })
-            
-            return {
-                'text': full_text.strip(),
-                'segments': segments_list,
-                'language': result.get('language', language or "auto-detected")
-            }
-            
+
+        # Depending on SDK provider, result may be string or object with .text
+        if hasattr(transcription, "text"):
+            srt_text = transcription.text
+        else:
+            srt_text = str(transcription)
+
+        return {
+            "text": "",           # not provided in SRT mode
+            "segments": [],         # not provided in SRT mode
+            "language": language or "pl",
+            "srt": srt_text,
+        }
+
     except Exception as e:
-        print(f"Błąd transkrypcji zewnętrznym serwisem: {e}")
+        print(f"Błąd transkrypcji zewnętrznym serwisem (SDK): {e}")
         raise
 
 def transcribe_audio(audio_path: Path, language: Optional[str] = None) -> Dict:
