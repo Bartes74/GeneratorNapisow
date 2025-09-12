@@ -148,7 +148,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
             console.log('Wysyłanie stylów filmu:', stylesData)
             
             const response = await axios.post(
-                `${API_URL}/api/render-final/${videoId}`,
+                apiPath(`/api/render-final/${videoId}`),
                 { 
                     subtitle_styles: stylesData
                 },
