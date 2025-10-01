@@ -13,7 +13,12 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 import subprocess
+import logging
 from app.transcription import transcribe_audio, extract_audio, generate_srt, detect_language
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Inicjalizacja FastAPI
 app = FastAPI(title="Subtitle Generator API")
@@ -31,11 +36,12 @@ app.add_middleware(
 # Ścieżki folderów
 BASE_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
+AUDIO_DIR = UPLOAD_DIR / "audio"  # Nowy folder na wyodrębnione audio
 TEMP_DIR = BASE_DIR / "temp"
 OUTPUT_DIR = BASE_DIR / "output"
 
 # Tworzenie folderów jeśli nie istnieją
-for dir in [UPLOAD_DIR, TEMP_DIR, OUTPUT_DIR]:
+for dir in [UPLOAD_DIR, AUDIO_DIR, TEMP_DIR, OUTPUT_DIR]:
     dir.mkdir(exist_ok=True)
 
 # Mount uploads directory
@@ -45,21 +51,23 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
-# Executor dla operacji blokujących
-executor = ThreadPoolExecutor(max_workers=3)
+# Executor dla operacji blokujących (domyślnie: min(32, (cpu_count() or 1) + 4))
+executor = ThreadPoolExecutor()
 
 @app.get("/")
 async def root():
     return {
         "message": "Subtitle Generator API",
-        "version": "1.0.0",
+        "version": "1.1.0",
+        "description": "Optimized version with pre-extracted audio for faster transcription",
         "endpoints": {
-            "upload_video": "POST /api/upload",
-            "transcribe": "POST /api/transcribe/{video_id}",
+            "upload_video": "POST /api/upload (now extracts audio immediately)",
+            "transcribe": "POST /api/transcribe/{video_id} (uses pre-extracted audio)",
             "download_srt": "GET /api/download/srt/{video_id}",
             "upload_srt": "POST /api/upload-srt/{video_id}",
             "render_preview": "POST /api/render-preview/{video_id}",
             "render_final": "POST /api/render-final/{video_id}",
+            "cleanup": "DELETE /api/cleanup/{video_id} (removes all files)",
             "health": "GET /api/health"
         }
     }
@@ -86,6 +94,7 @@ async def upload_video(file: UploadFile = File(...)):
     # Generowanie unikalnego ID dla pliku
     video_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{video_id}{file_ext}"
+    audio_path = AUDIO_DIR / f"{video_id}.mp3"  # Changed to MP3 for smaller file size
 
     # Zapis pliku
     try:
@@ -100,15 +109,26 @@ async def upload_video(file: UploadFile = File(...)):
         os.remove(file_path)
         raise HTTPException(400, f"Plik za duży. Max: {MAX_FILE_SIZE/1024/1024}MB")
 
-    # Pobierz długość wideo
-    duration = get_video_duration(file_path)
+    # NOWE: Wyodrębnij audio natychmiast po upload
+    try:
+        if not await asyncio.get_event_loop().run_in_executor(
+            executor, extract_audio, file_path, audio_path
+        ):
+            # Jeśli wyodrębnianie audio się nie powiedzie, usuń video i zwróć błąd
+            os.remove(file_path)
+            raise HTTPException(500, "Błąd wyodrębniania audio z wideo")
+    except Exception as e:
+        # Jeśli wyodrębnianie audio się nie powiedzie, usuń video i zwróć błąd
+        if file_path.exists():
+            os.remove(file_path)
+        raise HTTPException(500, f"Błąd wyodrębniania audio: {str(e)}")
 
     return {
         "video_id": video_id,
         "filename": file.filename,
         "size_mb": round(file_size / 1024 / 1024, 2),
         "format": file_ext,
-        "duration": duration
+        "audio_extracted": True  # Informacja że audio jest już gotowe
     }
 
 @app.post("/api/transcribe/{video_id}")
@@ -116,23 +136,20 @@ async def transcribe_video(
     video_id: str,
     language: Optional[str] = None
 ):
-    # Znajdź plik wideo
-    video_files = list(UPLOAD_DIR.glob(f"{video_id}.*"))
-    if not video_files:
+    # Sprawdź czy istnieje plik wideo (dla walidacji)
+    if not find_video_file(video_id):
         raise HTTPException(404, "Nie znaleziono pliku wideo")
 
-    video_path = video_files[0]
-    audio_path = TEMP_DIR / f"{video_id}.wav"
+    # NOWE: Użyj pre-wyodrębnionego audio
+    audio_path = AUDIO_DIR / f"{video_id}.mp3"  # Changed to MP3 format
     srt_path = OUTPUT_DIR / f"{video_id}.srt"
 
-    try:
-        # Wyodrębnij audio
-        if not await asyncio.get_event_loop().run_in_executor(
-            executor, extract_audio, video_path, audio_path
-        ):
-            raise HTTPException(500, "Błąd wyodrębniania audio")
+    # Sprawdź czy audio istnieje
+    if not audio_path.exists():
+        raise HTTPException(404, "Nie znaleziono wyodrębnionego pliku audio. Spróbuj ponownie przesłać wideo.")
 
-        # Transkrybuj
+    try:
+        # Transkrybuj używając pre-wyodrębnionego audio
         result = await asyncio.get_event_loop().run_in_executor(
             executor, transcribe_audio, audio_path, language
         )
@@ -146,9 +163,8 @@ async def transcribe_video(
         with open(srt_path, 'w', encoding='utf-8') as f:
             f.write(srt_content)
 
-        # Usuń tymczasowe audio
-        if audio_path.exists():
-            audio_path.unlink()
+        # UWAGA: Nie usuwamy audio - może być potrzebne do ponownej transkrypcji
+        # Audio zostanie usunięte wraz z video podczas czyszczenia
 
         return {
             "video_id": video_id,
@@ -210,17 +226,15 @@ async def render_preview(
         print(f"=== RENDER PREVIEW REQUEST ===")
         print(f"Video ID: {video_id}")
         print(f"Raw request data: {request_data}")
-        
+
         # Wyciągnij style z request_data
         subtitle_styles = request_data.get('subtitle_styles', {})
         print(f"Extracted subtitle styles: {subtitle_styles}")
-        
+
         # Znajdź pliki
-        video_files = list(UPLOAD_DIR.glob(f"{video_id}.*"))
-        if not video_files:
+        video_path = find_video_file(video_id)
+        if not video_path:
             raise HTTPException(404, "Nie znaleziono pliku wideo")
-        
-        video_path = video_files[0]
         srt_path = OUTPUT_DIR / f"{video_id}.srt"
         preview_path = TEMP_DIR / f"{video_id}_preview.mp4"
         
@@ -258,17 +272,15 @@ async def render_final_video(
         print(f"=== RENDER FINAL REQUEST ===")
         print(f"Video ID: {video_id}")
         print(f"Raw request data: {request_data}")
-        
+
         # Wyciągnij style z request_data
         subtitle_styles = request_data.get('subtitle_styles', {})
         print(f"Extracted subtitle styles: {subtitle_styles}")
-        
+
         # Znajdź pliki
-        video_files = list(UPLOAD_DIR.glob(f"{video_id}.*"))
-        if not video_files:
+        video_path = find_video_file(video_id)
+        if not video_path:
             raise HTTPException(404, "Nie znaleziono pliku wideo")
-        
-        video_path = video_files[0]
         srt_path = OUTPUT_DIR / f"{video_id}.srt"
         output_path = OUTPUT_DIR / f"{video_id}_subtitled.mp4"
         
@@ -307,7 +319,76 @@ async def download_final_video(video_id: str):
         filename=f"video_with_subtitles_{video_id}.mp4"
     )
 
+@app.delete("/api/cleanup/{video_id}")
+async def cleanup_video_files(video_id: str):
+    """Usuwa wszystkie pliki związane z danym video_id"""
+    try:
+        deleted_files = []
+        
+        # Usuń plik wideo
+        video_files = list(UPLOAD_DIR.glob(f"{video_id}.*"))
+        for video_file in video_files:
+            if video_file.is_file():
+                video_file.unlink()
+                deleted_files.append(f"video: {video_file.name}")
+        
+        # Usuń plik audio (both .wav and .mp3 for backward compatibility)
+        for ext in ['.mp3', '.wav']:
+            audio_file = AUDIO_DIR / f"{video_id}{ext}"
+            if audio_file.exists():
+                audio_file.unlink()
+                deleted_files.append(f"audio: {audio_file.name}")
+        
+        # Usuń plik SRT
+        srt_file = OUTPUT_DIR / f"{video_id}.srt"
+        if srt_file.exists():
+            srt_file.unlink()
+            deleted_files.append(f"srt: {srt_file.name}")
+        
+        # Usuń wyrenderowane wideo
+        rendered_file = OUTPUT_DIR / f"{video_id}_subtitled.mp4"
+        if rendered_file.exists():
+            rendered_file.unlink()
+            deleted_files.append(f"rendered: {rendered_file.name}")
+        
+        # Usuń plik podglądu
+        preview_file = TEMP_DIR / f"{video_id}_preview.mp4"
+        if preview_file.exists():
+            preview_file.unlink()
+            deleted_files.append(f"preview: {preview_file.name}")
+        
+        return {
+            "message": f"Usunięto {len(deleted_files)} plików",
+            "deleted_files": deleted_files,
+            "video_id": video_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(500, f"Błąd czyszczenia plików: {str(e)}")
+
 # Funkcje pomocnicze
+def find_video_file(video_id: str) -> Optional[Path]:
+    """Znajduje plik wideo po video_id"""
+    video_files = list(UPLOAD_DIR.glob(f"{video_id}.*"))
+    return video_files[0] if video_files else None
+
+def hex_to_ass_color(hex_color: str) -> str:
+    """Konwertuje kolor hex na format ASS (BGR)"""
+    if not hex_color.startswith('#'):
+        hex_color = '#' + hex_color
+    if len(hex_color) != 7:
+        return "&H00FFFFFF&"  # default white
+
+    hex_clean = hex_color[1:]  # usuń #
+    try:
+        r = int(hex_clean[0:2], 16)
+        g = int(hex_clean[2:4], 16)
+        b = int(hex_clean[4:6], 16)
+        # ASS używa formatu &HBBGGRR&
+        return f"&H00{b:02X}{g:02X}{r:02X}&"
+    except ValueError:
+        return "&H00FFFFFF&"  # default white
+
 def get_video_duration(video_path: Path) -> float:
     """Pobiera długość wideo w sekundach"""
     try:
@@ -319,7 +400,8 @@ def get_video_duration(video_path: Path) -> float:
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         return float(result.stdout.strip())
-    except:
+    except Exception as e:
+        logger.warning(f"Nie udało się pobrać długości wideo {video_path}: {e}")
         return 0
 
 def render_video_segment(video_path: Path, srt_path: Path, output_path: Path, styles: dict, duration: int):
@@ -341,24 +423,8 @@ def render_video_segment(video_path: Path, srt_path: Path, output_path: Path, st
         print(f"  Color: {color}")
         print(f"  Stroke Color: {stroke_color}")
         print(f"  Stroke Width: {stroke_width}")
-        
+
         # Konwersja kolorów z hex na ASS format (BGR)
-        def hex_to_ass_color(hex_color):
-            if not hex_color.startswith('#'):
-                hex_color = '#' + hex_color
-            if len(hex_color) != 7:
-                return "&H00FFFFFF&"  # default white
-            
-            hex_clean = hex_color[1:]  # usuń #
-            try:
-                r = int(hex_clean[0:2], 16)
-                g = int(hex_clean[2:4], 16)
-                b = int(hex_clean[4:6], 16)
-                # ASS używa formatu &HBBGGRR&
-                return f"&H00{b:02X}{g:02X}{r:02X}&"
-            except ValueError:
-                return "&H00FFFFFF&"  # default white
-        
         color_ass = hex_to_ass_color(color)
         stroke_color_ass = hex_to_ass_color(stroke_color)
         
@@ -418,24 +484,8 @@ def render_full_video(video_path: Path, srt_path: Path, output_path: Path, style
         print(f"  Color: {color}")
         print(f"  Stroke Color: {stroke_color}")
         print(f"  Stroke Width: {stroke_width}")
-        
+
         # Konwersja kolorów z hex na ASS format (BGR)
-        def hex_to_ass_color(hex_color):
-            if not hex_color.startswith('#'):
-                hex_color = '#' + hex_color
-            if len(hex_color) != 7:
-                return "&H00FFFFFF&"  # default white
-            
-            hex_clean = hex_color[1:]  # usuń #
-            try:
-                r = int(hex_clean[0:2], 16)
-                g = int(hex_clean[2:4], 16)
-                b = int(hex_clean[4:6], 16)
-                # ASS używa formatu &HBBGGRR&
-                return f"&H00{b:02X}{g:02X}{r:02X}&"
-            except ValueError:
-                return "&H00FFFFFF&"  # default white
-        
         color_ass = hex_to_ass_color(color)
         stroke_color_ass = hex_to_ass_color(stroke_color)
         

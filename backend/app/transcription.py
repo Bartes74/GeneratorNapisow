@@ -51,13 +51,27 @@ def generate_srt(segments: List[Dict]) -> str:
 
 def extract_audio(video_path: Path, audio_path: Path) -> bool:
     try:
+        # Use MP3 format to reduce file size (OpenAI API limit: 25MB)
+        # Convert .wav extension to .mp3 for proper format
+        audio_path_mp3 = audio_path.with_suffix('.mp3')
+
         cmd = [
             'ffmpeg', '-i', str(video_path),
-            '-vn', '-acodec', 'pcm_s16le',
-            '-ar', '16000', '-ac', '1', '-y',
-            str(audio_path)
+            '-vn',  # no video
+            '-acodec', 'libmp3lame',  # MP3 codec
+            '-ar', '16000',  # 16kHz sample rate (good for speech)
+            '-ac', '1',  # mono
+            '-b:a', '32k',  # 32kbps bitrate (sufficient for speech)
+            '-y',  # overwrite
+            str(audio_path_mp3)
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
+
+        # Rename to original path if user expects .wav extension
+        if result.returncode == 0 and audio_path_mp3.exists():
+            if audio_path != audio_path_mp3:
+                audio_path_mp3.rename(audio_path.with_suffix('.mp3'))
+
         return result.returncode == 0
     except Exception as e:
         print(f"Błąd FFmpeg: {e}")
@@ -199,6 +213,7 @@ def normalize_srt_text(srt_text: str, max_line_length: int = 38) -> str:
 
             cur_start = start_ms
             part_idx = 0
+            next_idx = len(out_blocks) + 1
             for c, clen in zip(chunks, lengths):
                 part_idx += 1
                 share = int(total_ms * (clen / total_len))
@@ -206,7 +221,8 @@ def normalize_srt_text(srt_text: str, max_line_length: int = 38) -> str:
                 part_end = end_ms if part_idx == len(chunks) else cur_start + max(200, share)
                 new_ts = f"{from_ms(cur_start)} --> {from_ms(part_end)}"
                 new_lines = ["\n".join(c).strip()]
-                out_blocks.append("\n".join([str(len(out_blocks)+1), new_ts] + new_lines).strip())
+                out_blocks.append("\n".join([str(next_idx), new_ts] + new_lines).strip())
+                next_idx += 1
                 cur_start = part_end
 
     return "\n\n".join(out_blocks) + "\n"

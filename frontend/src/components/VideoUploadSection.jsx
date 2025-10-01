@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 import { apiPath } from '../api'
 
@@ -12,6 +12,15 @@ function VideoUploadSection({ onVideoUpload, onTranscriptionComplete }) {
   const [selectedLanguage, setSelectedLanguage] = useState('auto')
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
+
+  // Cleanup URL.createObjectURL on unmount or when videoPreviewUrl changes
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl) {
+        URL.revokeObjectURL(videoPreviewUrl)
+      }
+    }
+  }, [videoPreviewUrl])
 
   const handleVideoChange = (e) => {
     const file = e.target.files[0]

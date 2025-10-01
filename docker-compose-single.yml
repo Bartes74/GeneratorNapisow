@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  subtitle-generator:
+    image: dunczyk/generator-napisow:latest
+    # To build locally instead of pulling from DockerHub, uncomment:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: subtitle-generator
+    ports:
+      - "80:80"      # Frontend via Nginx
+      - "8000:8000"  # Backend API (optional direct access)
+    environment:
+      # Required: OpenAI API configuration
+      - TRANSCRIPTION_API_KEY=${TRANSCRIPTION_API_KEY:-your-api-key-here}
+      - TRANSCRIPTION_API_URL=${TRANSCRIPTION_API_URL:-https://api.openai.com/v1}
+      - TRANSCRIPTION_MODEL=${TRANSCRIPTION_MODEL:-whisper-1}
+
+      # Optional: CORS origins
+      - FRONTEND_ORIGINS=${FRONTEND_ORIGINS:-http://localhost,http://localhost:5173}
+
+      # Optional: Public API base (for custom domains)
+      # - PUBLIC_API_BASE=https://yourdomain.com
+
+    volumes:
+      # Persist uploaded files, temp data, and output
+      - ./data/uploads:/app/uploads
+      - ./data/temp:/app/temp
+      - ./data/output:/app/output
+      # Optionally mount logs directory
+      - ./data/logs:/var/log/supervisor
+
+    restart: unless-stopped
+
+    # Resource limits (optional but recommended)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Optional: Add Traefik for SSL (production)
+# networks:
+#   - traefik-public
+
+# networks:
+#   traefik-public:
+#     external: true

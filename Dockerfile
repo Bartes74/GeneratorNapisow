@@ -50,7 +50,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Create directories for uploads, temp and output
-RUN mkdir -p uploads temp output
+RUN mkdir -p uploads uploads/audio temp output
 
 # Copy backend source code
 COPY backend/ .
@@ -62,8 +62,8 @@ COPY --from=frontend-build /app/dist /var/www/html
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Copy nginx configuration
-COPY frontend/nginx.conf /etc/nginx/nginx.conf
+# Copy nginx configuration (single-container mode: nginx + backend in same container)
+COPY frontend/nginx-single-container.conf /etc/nginx/nginx.conf
 
 # Copy supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

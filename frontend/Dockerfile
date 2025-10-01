@@ -20,10 +20,10 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copy the build output to the Nginx html directory
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /var/www/html
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy custom nginx configuration (multi-container mode: separate frontend/backend containers)
+COPY nginx-multi-container.conf /etc/nginx/nginx.conf
 
 # Expose port 80
 EXPOSE 80

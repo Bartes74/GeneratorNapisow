@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import axios from 'axios'
 import { apiPath } from '../api'
 
@@ -178,24 +178,24 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
         }
     }
 
-    const generateSmoothTextShadow = (shadowColor, width) => {
-        if (width === 0) return 'none'
+    const textShadow = useMemo(() => {
+        if (strokeWidth === 0) return 'none'
         const shadows = []
         const steps = 16
         for (let i = 0; i < steps; i++) {
             const angle = (i * Math.PI * 2) / steps
-            const x = Math.cos(angle) * width
-            const y = Math.sin(angle) * width
-            shadows.push(`${x.toFixed(2)}px ${y.toFixed(2)}px 0 ${shadowColor}`)
+            const x = Math.cos(angle) * strokeWidth
+            const y = Math.sin(angle) * strokeWidth
+            shadows.push(`${x.toFixed(2)}px ${y.toFixed(2)}px 0 ${strokeColor}`)
         }
         for (let i = 0; i < steps; i++) {
             const angle = (i * Math.PI * 2) / steps + (Math.PI / steps)
-            const x = Math.cos(angle) * (width * 0.7)
-            const y = Math.sin(angle) * (width * 0.7)
-            shadows.push(`${x.toFixed(2)}px ${y.toFixed(2)}px 0 ${shadowColor}`)
+            const x = Math.cos(angle) * (strokeWidth * 0.7)
+            const y = Math.sin(angle) * (strokeWidth * 0.7)
+            shadows.push(`${x.toFixed(2)}px ${y.toFixed(2)}px 0 ${strokeColor}`)
         }
         return shadows.join(', ')
-    }
+    }, [strokeColor, strokeWidth])
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
@@ -301,7 +301,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
                             fontFamily,
                             fontSize: `${fontSize}px`,
                             color,
-                            textShadow: generateSmoothTextShadow(strokeColor, strokeWidth),
+                            textShadow,
                             lineHeight: 1.2,
                             fontWeight: 500
                         }}

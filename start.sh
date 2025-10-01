@@ -8,7 +8,7 @@ cd "$PROJECT_ROOT"
 echo "[start] Project root: $PROJECT_ROOT"
 
 # Prepare runtime directories
-mkdir -p logs run backend/uploads backend/temp backend/output
+mkdir -p logs run backend/uploads backend/uploads/audio backend/temp backend/output
 
 # Load environment variables if .env exists
 if [ -f .env ]; then

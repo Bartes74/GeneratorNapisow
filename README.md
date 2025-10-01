@@ -8,10 +8,30 @@ A full-stack application for generating subtitles from video files using externa
 - **Backend**: FastAPI with external transcription service integration (OpenAI-compatible APIs)
 - **Infrastructure**: Docker & Docker Compose for containerization
 
+## Quick Start with Docker 🐳
+
+### Pull from DockerHub (Recommended)
+
+```bash
+# Pull the image
+docker pull dunczyk/generator-napisow:latest
+
+# Run with your API key
+docker run -d -p 80:80 \
+  -e TRANSCRIPTION_API_KEY=your-openai-api-key \
+  dunczyk/generator-napisow:latest
+
+# Access at http://localhost
+```
+
+📖 **See [DOCKER-QUICKSTART.md](DOCKER-QUICKSTART.md) for detailed instructions**
+📖 **See [DEPLOYMENT-OPTIONS.md](DEPLOYMENT-OPTIONS.md) to understand deployment options**
+
 ## Prerequisites
 
 - Docker
 - Docker Compose
+- OpenAI API Key (for transcription)
 
 ## Deployment
 

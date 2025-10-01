@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import VideoUploadSection from './components/VideoUploadSection'
 import SubtitleEditor from './components/SubtitleEditor'
+import { apiPath } from './api'
 
 function App() {
     const [darkMode, setDarkMode] = useState(false)
@@ -33,7 +34,18 @@ function App() {
         setTranscriptionDone(true)
     }
 
-    const handleReset = () => {
+    const handleReset = async () => {
+        // Cleanup files from server if video was uploaded
+        if (videoData?.video_id) {
+            try {
+                await fetch(apiPath(`/api/cleanup/${videoData.video_id}`), {
+                    method: 'DELETE'
+                })
+            } catch (err) {
+                console.error('Błąd czyszczenia plików:', err)
+            }
+        }
+
         setTranscriptionDone(false)
         setVideoData(null)
         setTranscriptionData(null)
@@ -41,16 +53,13 @@ function App() {
 
     const handleSubtitleComplete = async () => {
         try {
-            const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '')
-            const url = `${base || ''}/api/render-final/${videoData.video_id}`
-            const response = await fetch(url, {
+            const response = await fetch(apiPath(`/api/render-final/${videoData.video_id}`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ subtitle_styles: subtitleStyles })
             })
             if (response.ok) {
-                const dl = `${base || ''}/api/download/video/${videoData.video_id}`
-                window.open(dl, '_blank')
+                window.open(apiPath(`/api/download/video/${videoData.video_id}`), '_blank')
             }
         } catch (err) {
             alert('Błąd podczas renderowania filmu')
@@ -96,9 +105,7 @@ function App() {
                                 <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Transkrypcja ukończona</h3>
                                 <button
                                     onClick={() => {
-                                        const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '')
-                                        const link = `${base || ''}/api/download/srt/${videoData.video_id}`
-                                        window.open(link, '_blank')
+                                        window.open(apiPath(`/api/download/srt/${videoData.video_id}`), '_blank')
                                     }}
                                     className="w-full py-3 bg-[#006575] text-white rounded-lg hover:bg-[#004A55] transition-all duration-200 font-medium"
                                 >
