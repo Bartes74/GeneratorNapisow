@@ -71,5 +71,8 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Expose both ports
 EXPOSE 80 8000
 
+RUN chown -R 1001:1001 /app
+USER 1001
+
 # Start via entrypoint to materialize runtime config for frontend
 ENTRYPOINT ["/docker-entrypoint.sh"]
