@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Subtitle Generator API")
 
 # CORS dla frontendu - updated for production
-frontend_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://localhost").split(",")
+frontend_origins = [origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://localhost").split(",")]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=frontend_origins,
@@ -51,8 +51,8 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
-# Executor dla operacji blokujących (domyślnie: min(32, (cpu_count() or 1) + 4))
-executor = ThreadPoolExecutor()
+# Executor dla operacji blokujących - ograniczony do 4 workerów
+executor = ThreadPoolExecutor(max_workers=4)
 
 @app.get("/")
 async def root():
@@ -96,27 +96,38 @@ async def upload_video(file: UploadFile = File(...)):
     file_path = UPLOAD_DIR / f"{video_id}{file_ext}"
     audio_path = AUDIO_DIR / f"{video_id}.mp3"  # Changed to MP3 for smaller file size
 
-    # Zapis pliku
+    # Zapis pliku z walidacją rozmiaru podczas zapisu
     try:
+        bytes_written = 0
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while chunk := file.file.read(8192):  # Read in 8KB chunks
+                bytes_written += len(chunk)
+                if bytes_written > MAX_FILE_SIZE:
+                    # Usuń plik natychmiast jeśli przekroczono limit
+                    buffer.close()
+                    os.remove(file_path)
+                    raise HTTPException(400, f"Plik za duży. Max: {MAX_FILE_SIZE/1024/1024}MB")
+                buffer.write(chunk)
+        file_size = bytes_written
+    except HTTPException:
+        raise
     except Exception as e:
+        if file_path.exists():
+            os.remove(file_path)
         raise HTTPException(500, f"Błąd zapisu pliku: {str(e)}")
-
-    # Sprawdzenie rozmiaru
-    file_size = os.path.getsize(file_path)
-    if file_size > MAX_FILE_SIZE:
-        os.remove(file_path)
-        raise HTTPException(400, f"Plik za duży. Max: {MAX_FILE_SIZE/1024/1024}MB")
 
     # NOWE: Wyodrębnij audio natychmiast po upload
     try:
-        if not await asyncio.get_event_loop().run_in_executor(
+        success, error_msg = await asyncio.get_event_loop().run_in_executor(
             executor, extract_audio, file_path, audio_path
-        ):
+        )
+        if not success:
             # Jeśli wyodrębnianie audio się nie powiedzie, usuń video i zwróć błąd
-            os.remove(file_path)
-            raise HTTPException(500, "Błąd wyodrębniania audio z wideo")
+            if file_path.exists():
+                os.remove(file_path)
+            raise HTTPException(500, f"Błąd wyodrębniania audio z wideo: {error_msg}")
+    except HTTPException:
+        raise
     except Exception as e:
         # Jeśli wyodrębnianie audio się nie powiedzie, usuń video i zwróć błąd
         if file_path.exists():
@@ -223,13 +234,13 @@ async def render_preview(
 ):
     """Generuje 10-sekundową próbkę"""
     try:
-        print(f"=== RENDER PREVIEW REQUEST ===")
-        print(f"Video ID: {video_id}")
-        print(f"Raw request data: {request_data}")
+        logger.info(f"=== RENDER PREVIEW REQUEST ===")
+        logger.info(f"Video ID: {video_id}")
+        logger.info(f"Raw request data: {request_data}")
 
         # Wyciągnij style z request_data
         subtitle_styles = request_data.get('subtitle_styles', {})
-        print(f"Extracted subtitle styles: {subtitle_styles}")
+        logger.info(f"Extracted subtitle styles: {subtitle_styles}")
 
         # Znajdź pliki
         video_path = find_video_file(video_id)
@@ -259,7 +270,7 @@ async def render_preview(
         )
         
     except Exception as e:
-        print(f"Błąd generowania podglądu: {e}")
+        logger.error(f"Błąd generowania podglądu: {e}")
         raise HTTPException(500, f"Błąd generowania podglądu: {str(e)}")
 
 @app.post("/api/render-final/{video_id}")
@@ -269,13 +280,13 @@ async def render_final_video(
 ):
     """Renderuje pełny film z napisami"""
     try:
-        print(f"=== RENDER FINAL REQUEST ===")
-        print(f"Video ID: {video_id}")
-        print(f"Raw request data: {request_data}")
+        logger.info(f"=== RENDER FINAL REQUEST ===")
+        logger.info(f"Video ID: {video_id}")
+        logger.info(f"Raw request data: {request_data}")
 
         # Wyciągnij style z request_data
         subtitle_styles = request_data.get('subtitle_styles', {})
-        print(f"Extracted subtitle styles: {subtitle_styles}")
+        logger.info(f"Extracted subtitle styles: {subtitle_styles}")
 
         # Znajdź pliki
         video_path = find_video_file(video_id)
@@ -305,7 +316,7 @@ async def render_final_video(
         }
         
     except Exception as e:
-        print(f"Błąd renderowania: {e}")
+        logger.error(f"Błąd renderowania: {e}")
         raise HTTPException(500, f"Błąd renderowania: {str(e)}")
 
 @app.get("/api/download/video/{video_id}")
@@ -389,141 +400,94 @@ def hex_to_ass_color(hex_color: str) -> str:
     except ValueError:
         return "&H00FFFFFF&"  # default white
 
-def get_video_duration(video_path: Path) -> float:
-    """Pobiera długość wideo w sekundach"""
-    try:
-        cmd = [
-            'ffprobe', '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            str(video_path)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return float(result.stdout.strip())
-    except Exception as e:
-        logger.warning(f"Nie udało się pobrać długości wideo {video_path}: {e}")
-        return 0
+def render_video_with_subtitles(
+    video_path: Path,
+    srt_path: Path,
+    output_path: Path,
+    styles: dict,
+    duration: Optional[int] = None,
+    preset: str = 'medium',
+    crf: int = 20
+):
+    """Renderuje wideo z napisami - wspólna funkcja dla próbki i pełnego filmu
 
-def render_video_segment(video_path: Path, srt_path: Path, output_path: Path, styles: dict, duration: int):
-    """Renderuje fragment wideo z napisami"""
+    Args:
+        video_path: Ścieżka do pliku wideo
+        srt_path: Ścieżka do pliku SRT
+        output_path: Ścieżka wyjściowa
+        styles: Słownik ze stylami napisów
+        duration: Długość w sekundach (None = pełny film)
+        preset: Preset ffmpeg (fast/medium/slow)
+        crf: Constant Rate Factor (niższe = lepsza jakość)
+    """
     try:
-        print(f"=== RENDER VIDEO SEGMENT ===")
-        print(f"Received styles: {styles}")
-        
+        render_type = "PREVIEW" if duration else "FULL VIDEO"
+        logger.info(f"=== RENDER {render_type} ===")
+        logger.info(f"Received styles: {styles}")
+
         # Wyciągnij style z właściwej struktury
         font_family = styles.get('fontFamily', 'Arial')
         font_size = styles.get('fontSize', 24)
         color = styles.get('color', '#FFFFFF')
         stroke_color = styles.get('strokeColor', '#000000')
         stroke_width = styles.get('strokeWidth', 2)
-        
-        print(f"Parsed styles:")
-        print(f"  Font: {font_family}")
-        print(f"  Size: {font_size}")
-        print(f"  Color: {color}")
-        print(f"  Stroke Color: {stroke_color}")
-        print(f"  Stroke Width: {stroke_width}")
+
+        logger.info(f"Parsed styles: Font={font_family}, Size={font_size}, Color={color}, Stroke={stroke_color}, Width={stroke_width}")
 
         # Konwersja kolorów z hex na ASS format (BGR)
         color_ass = hex_to_ass_color(color)
         stroke_color_ass = hex_to_ass_color(stroke_color)
-        
-        print(f"Converted colors:")
-        print(f"  Text color ASS: {color_ass}")
-        print(f"  Stroke color ASS: {stroke_color_ass}")
-        
+
+        logger.info(f"Converted colors: Text={color_ass}, Stroke={stroke_color_ass}")
+
         # Usuń stary plik jeśli istnieje
         if output_path.exists():
             output_path.unlink()
-        
+
+        # Buduj komendę ffmpeg
         cmd = [
             'ffmpeg', '-i', str(video_path),
             '-vf',
             f"subtitles={srt_path}:force_style='Fontname={font_family},Fontsize={font_size},PrimaryColour={color_ass},OutlineColour={stroke_color_ass},Outline={stroke_width},Bold=0,BorderStyle=1'",
-            '-t', str(duration),
+        ]
+
+        # Dodaj ograniczenie czasu dla próbki
+        if duration:
+            cmd.extend(['-t', str(duration)])
+
+        # Dodaj parametry kodowania
+        cmd.extend([
             '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '23',
+            '-preset', preset,
+            '-crf', str(crf),
             '-c:a', 'aac',
             '-y', str(output_path)
-        ]
-        
-        print(f"FFmpeg command: {' '.join(cmd)}")
+        ])
+
+        logger.info(f"FFmpeg command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if result.returncode != 0:
-            print(f"FFmpeg stderr: {result.stderr}")
-            print(f"FFmpeg stdout: {result.stdout}")
+            logger.error(f"FFmpeg stderr: {result.stderr}")
+            logger.error(f"FFmpeg stdout: {result.stdout}")
             raise Exception(f"FFmpeg error: {result.stderr}")
-            
-        print("Próbka wygenerowana pomyślnie")
+
+        logger.info(f"{render_type} wygenerowany pomyślnie")
         return True
-        
+
     except Exception as e:
-        print(f"Błąd renderowania próbki: {e}")
+        logger.error(f"Błąd renderowania {render_type}: {e}")
         import traceback
         traceback.print_exc()
         raise
+
+def render_video_segment(video_path: Path, srt_path: Path, output_path: Path, styles: dict, duration: int):
+    """Renderuje fragment wideo z napisami (próbka)"""
+    return render_video_with_subtitles(video_path, srt_path, output_path, styles, duration=duration, preset='fast', crf=23)
 
 def render_full_video(video_path: Path, srt_path: Path, output_path: Path, styles: dict):
     """Renderuje pełne wideo z napisami"""
-    try:
-        print(f"=== RENDER FULL VIDEO ===")
-        print(f"Received styles: {styles}")
-        
-        # Wyciągnij style z właściwej struktury
-        font_family = styles.get('fontFamily', 'Arial')
-        font_size = styles.get('fontSize', 24)
-        color = styles.get('color', '#FFFFFF')
-        stroke_color = styles.get('strokeColor', '#000000')
-        stroke_width = styles.get('strokeWidth', 2)
-        
-        print(f"Parsed styles:")
-        print(f"  Font: {font_family}")
-        print(f"  Size: {font_size}")
-        print(f"  Color: {color}")
-        print(f"  Stroke Color: {stroke_color}")
-        print(f"  Stroke Width: {stroke_width}")
-
-        # Konwersja kolorów z hex na ASS format (BGR)
-        color_ass = hex_to_ass_color(color)
-        stroke_color_ass = hex_to_ass_color(stroke_color)
-        
-        print(f"Converted colors:")
-        print(f"  Text color ASS: {color_ass}")
-        print(f"  Stroke color ASS: {stroke_color_ass}")
-        
-        # Usuń stary plik jeśli istnieje
-        if output_path.exists():
-            output_path.unlink()
-        
-        cmd = [
-            'ffmpeg', '-i', str(video_path),
-            '-vf',
-            f"subtitles={srt_path}:force_style='Fontname={font_family},Fontsize={font_size},PrimaryColour={color_ass},OutlineColour={stroke_color_ass},Outline={stroke_width},Bold=0,BorderStyle=1'",
-            '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', '20',
-            '-c:a', 'aac',
-            '-y', str(output_path)
-        ]
-        
-        print(f"FFmpeg command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"FFmpeg stderr: {result.stderr}")
-            print(f"FFmpeg stdout: {result.stdout}")
-            raise Exception(f"FFmpeg error: {result.stderr}")
-            
-        print("Film wygenerowany pomyślnie")
-        return True
-        
-    except Exception as e:
-        print(f"Błąd renderowania filmu: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    return render_video_with_subtitles(video_path, srt_path, output_path, styles, duration=None, preset='medium', crf=20)
 
 if __name__ == "__main__":
     import uvicorn

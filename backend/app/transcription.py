@@ -49,7 +49,12 @@ def generate_srt(segments: List[Dict]) -> str:
     
     return "\n".join(srt_content)
 
-def extract_audio(video_path: Path, audio_path: Path) -> bool:
+def extract_audio(video_path: Path, audio_path: Path) -> tuple[bool, str]:
+    """Extract audio from video file.
+
+    Returns:
+        tuple: (success: bool, error_message: str)
+    """
     try:
         # Use MP3 format to reduce file size (OpenAI API limit: 25MB)
         # Convert .wav extension to .mp3 for proper format
@@ -61,21 +66,35 @@ def extract_audio(video_path: Path, audio_path: Path) -> bool:
             '-acodec', 'libmp3lame',  # MP3 codec
             '-ar', '16000',  # 16kHz sample rate (good for speech)
             '-ac', '1',  # mono
-            '-b:a', '32k',  # 32kbps bitrate (sufficient for speech)
+            '-b:a', '64k',  # 64kbps bitrate (improved quality)
             '-y',  # overwrite
             str(audio_path_mp3)
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        if result.returncode != 0:
+            error_msg = f"FFmpeg error (code {result.returncode}): {result.stderr[:500]}"
+            print(error_msg)
+            return False, error_msg
 
         # Rename to original path if user expects .wav extension
-        if result.returncode == 0 and audio_path_mp3.exists():
+        if audio_path_mp3.exists():
             if audio_path != audio_path_mp3:
                 audio_path_mp3.rename(audio_path.with_suffix('.mp3'))
+            return True, ""
+        else:
+            error_msg = "Audio file was not created"
+            print(error_msg)
+            return False, error_msg
 
-        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        error_msg = "FFmpeg timed out after 5 minutes"
+        print(error_msg)
+        return False, error_msg
     except Exception as e:
-        print(f"Błąd FFmpeg: {e}")
-        return False
+        error_msg = f"Unexpected error in extract_audio: {str(e)}"
+        print(error_msg)
+        return False, error_msg
 
 def transcribe_audio_with_external_service(audio_path: Path, language: Optional[str] = None) -> Dict:
     """Transcribe audio using OpenAI Python SDK client.

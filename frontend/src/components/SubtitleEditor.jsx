@@ -10,6 +10,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
     const [strokeWidth, setStrokeWidth] = useState(subtitleStyles?.strokeWidth || 2)
     const [loading, setLoading] = useState(false)
     const fileInputRef = useRef(null)
+    const previewUrlRef = useRef(null)
 
     const fonts = [
         'Arial', 'Helvetica', 'Times New Roman', 'Georgia',
@@ -59,8 +60,15 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
             )
             
             console.log('Próbka wygenerowana, otwieranie...')
+
+            // Cleanup previous preview URL if exists
+            if (previewUrlRef.current) {
+                window.URL.revokeObjectURL(previewUrlRef.current)
+            }
+
             const url = window.URL.createObjectURL(new Blob([response.data], { type: 'video/mp4' }))
-            
+            previewUrlRef.current = url
+
             // Utwórz element video zamiast otwierania w nowej karcie
             const videoElement = document.createElement('video')
             videoElement.src = url
@@ -113,7 +121,10 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
             
             const closePreview = () => {
                 document.body.removeChild(overlay)
-                window.URL.revokeObjectURL(url)
+                if (previewUrlRef.current) {
+                    window.URL.revokeObjectURL(previewUrlRef.current)
+                    previewUrlRef.current = null
+                }
             }
             
             closeButton.onclick = closePreview
