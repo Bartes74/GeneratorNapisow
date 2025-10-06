@@ -33,14 +33,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install system dependencies for both frontend serving and backend processing
+# + gosu do zrzucania uprawnień
+# + libcap2-bin by nadać nginx możliwość bindowania portu <1024 bez roota
 RUN apt-get update && apt-get install -y \
     build-essential \
     ffmpeg \
     git \
     nginx \
     supervisor \
+    gosu \
+    libcap2-bin \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/log/supervisor
+    && mkdir -p /var/log/supervisor /var/run/supervisor \
+    && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx
 
 # Copy backend requirements
 COPY backend/requirements.txt .
