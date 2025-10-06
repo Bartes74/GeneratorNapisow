@@ -32,7 +32,7 @@ A full-stack application for generating subtitles from video files using externa
 ### Pull from DockerHub (Recommended)
 
 ```bash
-# Pull the image
+# Pull the latest optimized image (v1.1.0 - linux/amd64)
 docker pull dunczyk/generator-napisow:latest
 
 # Run with your API key
@@ -40,8 +40,16 @@ docker run -d -p 80:80 \
   -e TRANSCRIPTION_API_KEY=your-openai-api-key \
   dunczyk/generator-napisow:latest
 
+# Or use specific version
+docker pull dunczyk/generator-napisow:v1.1.0
+
 # Access at http://localhost
 ```
+
+**Image Details:**
+- Platform: `linux/amd64`
+- Size: ~400MB (reduced from ~500MB in v1.0.0)
+- Latest version: `v1.1.0` (2025-10-06)
 
 📖 **See [DOCKER-QUICKSTART.md](DOCKER-QUICKSTART.md) for detailed instructions**
 📖 **See [DEPLOYMENT-OPTIONS.md](DEPLOYMENT-OPTIONS.md) to understand deployment options**
