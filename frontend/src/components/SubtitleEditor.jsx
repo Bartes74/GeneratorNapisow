@@ -164,7 +164,7 @@ function SubtitleEditor({ videoId, subtitleStyles, onStylesChange, onComplete })
                     subtitle_styles: stylesData
                 },
                 { 
-                    timeout: 300000,
+                    timeout: 900000,
                     headers: {
                         'Content-Type': 'application/json'
                     }
